@@ -56,7 +56,7 @@ export const planProject = async (userPrompt: string): Promise<ProjectPlan> => {
     const plan: ProjectPlan = JSON.parse(clean);
     return plan;
   } catch {
-    throw new Error("Failed to parse project plan from GPT response.");
+    throw new Error("Failed to parse project plan from UiMason AI response.");
   }
 };
 

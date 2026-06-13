@@ -15,6 +15,7 @@ import type { PendingDiff } from "./hooks/useAgentRunner";
 import { useConversationFlow } from "./hooks/useConversationFlow";
 import type { Workspace, UserProfile } from "./types/chat";
 import type { AgentSession } from "./hooks/useAgent";
+import { exchangeGitHubOAuthCode } from "./services/githubService";
 
 export default function App() {
   const sessions = useSessionManager();
@@ -23,8 +24,47 @@ export default function App() {
   // ── Auth bootstrap ────────────────────────────────────────
   const { initializeAuth } = appController;
 
+  const [oauthStatus, setOauthStatus] = useState<{ message: string; variant: "info" | "error" } | null>(null);
+
   useEffect(() => {
-    initializeAuth();
+    let cancelled = false;
+    const cleanOAuthUrl = () => {
+      window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
+    };
+
+    (async () => {
+      const authenticated = await initializeAuth();
+      if (cancelled) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const state = params.get("state");
+      if (!code) return;
+
+      if (!authenticated || !state) {
+        cleanOAuthUrl();
+        setOauthStatus({ message: "Connection expired. Please try again.", variant: "error" });
+        return;
+      }
+
+      try {
+        await exchangeGitHubOAuthCode(code, state);
+        if (!cancelled) setOauthStatus({ message: "Source control connected.", variant: "info" });
+      } catch (error) {
+        if (!cancelled) {
+          setOauthStatus({
+            message: error instanceof Error ? error.message : "Source control connection failed.",
+            variant: "error",
+          });
+        }
+      } finally {
+        cleanOAuthUrl();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [initializeAuth]);
 
   // ── UI state ───────────────────────────────────────────────
@@ -132,6 +172,10 @@ export default function App() {
           variant="error"
           onClose={appController.clearAppError}
         />
+      )}
+
+      {oauthStatus && (
+        <AppStatusBanner message={oauthStatus.message} variant={oauthStatus.variant} onClose={() => setOauthStatus(null)} />
       )}
 
       {appController.statusMessage && !appController.appError && (

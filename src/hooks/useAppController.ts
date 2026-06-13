@@ -38,14 +38,16 @@ export const useAppController = ({ sessions }: UseAppControllerOptions) => {
         setAppError(
           `Authentication failed: ${errorBody?.error || response.statusText || response.status}`
         );
-        return;
+        return false;
       }
       const data = await response.json();
       setAuthToken(data.token, data.refreshToken);
       setTransientStatus("Authenticated successfully");
+      return true;
     } catch (error) {
       setAppError("Unable to reach backend auth service. Some features may be unavailable.");
       console.warn("Auth initialization failed", error);
+      return false;
     }
   }, [setTransientStatus]);
 

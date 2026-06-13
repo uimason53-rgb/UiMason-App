@@ -74,7 +74,7 @@ export default function Settings({ onBack }: { onBack?: () => void }) {
             )}
             <div>
               <h2 className="s-title">Settings</h2>
-              <p className="s-sub">Manage AI reliability preferences.</p>
+              <p className="s-sub">Manage reliability preferences.</p>
             </div>
           </div>
           <button className={`s-save-btn${saved ? " s-save-btn--saved" : ""}`} onClick={handleSave}>
@@ -83,25 +83,14 @@ export default function Settings({ onBack }: { onBack?: () => void }) {
         </div>
 
         <div className="s-block">
-          <p className="s-block__label">AI Roles</p>
+          <p className="s-block__label">AI Engine</p>
 
           <div className="s-ai-status">
             <div className="s-ai-status__left">
               <span className="s-status-dot s-status-dot--on" />
               <div>
-                <span className="s-ai-status__name">OpenAI GPT-5.5 Brain</span>
-                <span className="s-ai-status__note">Planning, reasoning, architecture, review, and routing</span>
-              </div>
-            </div>
-            <span className="s-badge s-badge--active">Active</span>
-          </div>
-
-          <div className="s-ai-status" style={{ marginTop: 12 }}>
-            <div className="s-ai-status__left">
-              <span className="s-status-dot s-status-dot--on" />
-              <div>
-                <span className="s-ai-status__name">DeepSeek V4 Pro Builder</span>
-                <span className="s-ai-status__note">Code generation, targeted edits, test generation, and repairs</span>
+                <span className="s-ai-status__name">UiMason AI</span>
+                <span className="s-ai-status__note">Planning, coding, review, repair, and deployment assistance</span>
               </div>
             </div>
             <span className="s-badge s-badge--active">Active</span>
@@ -114,7 +103,7 @@ export default function Settings({ onBack }: { onBack?: () => void }) {
           <div className="s-row">
             <div className="s-row__text">
               <span className="s-row__name">Auto-fix errors</span>
-              <span className="s-row__desc">DeepSeek Builder retries and repairs code errors up to 3 times.</span>
+              <span className="s-row__desc">UiMason retries and repairs code errors up to 3 times.</span>
             </div>
             <Toggle checked={prefs.autoFix} onChange={(v) => setPrefs((p) => ({ ...p, autoFix: v }))} />
           </div>

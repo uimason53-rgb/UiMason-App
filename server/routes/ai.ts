@@ -3,9 +3,11 @@
 // AI proxy routes — all provider streaming + non-streaming
 // Scoped to authenticated user with usage tracking
 // ─────────────────────────────────────────────────────────────
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { Router, type Request, type Response as ExpressResponse, type NextFunction } from "express";
 import { z } from "zod";
-import db from "../db/index";
+import { db } from "../db/client";
+import { users } from "../db/schema";
+import { eq } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 import { aiRateLimiter } from "../middleware/rateLimiter";
 
@@ -18,8 +20,8 @@ const DEEPSEEK_KEY: string = process.env.DEEPSEEK_KEY || "";
 const CLAUDE_KEY: string = process.env.CLAUDE_KEY || "";
 const OPENAI_KEY: string = process.env.OPENAI_KEY || "";
 const GEMINI_KEY: string = process.env.GEMINI_KEY || "";
-const BRAIN_MODEL = "gpt-5.5";
-const BUILDER_MODEL = "deepseek-v4-pro";
+const BRAIN_MODEL = "gpt-4o";
+const BUILDER_MODEL = "deepseek-chat";
 
 // ── Zod schemas ──────────────────────────────────────────────
 const chatMessageSchema = z.object({
@@ -60,11 +62,17 @@ const openaiChatSchema = z.object({
   temperature: z.number().min(0).max(2).optional().default(0.3),
 });
 
-// ── Usage tracking middleware ────────────────────────────────
-const trackUsage = (req: Request, res: Response, next: NextFunction) => {
+// ── Usage tracking middleware (Drizzle / PostgreSQL) ─────────
+const trackUsage = async (req: Request, res: ExpressResponse, next: NextFunction) => {
   const userId = req.user!.userId;
   try {
-    const user = db.prepare("SELECT plan, usageCount, usageLimit FROM users WHERE id = ?").get(userId) as { plan: string; usageCount: number; usageLimit: number } | undefined;
+    const result = await db
+      .select({ plan: users.plan, usageCount: users.usageCount, usageLimit: users.usageLimit })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const user = result[0];
     if (user) {
       if (user.usageCount >= user.usageLimit) {
         return res.status(429).json({
@@ -74,7 +82,10 @@ const trackUsage = (req: Request, res: Response, next: NextFunction) => {
           usageLimit: user.usageLimit,
         });
       }
-      db.prepare("UPDATE users SET usageCount = usageCount + 1 WHERE id = ?").run(userId);
+      await db
+        .update(users)
+        .set({ usageCount: user.usageCount + 1 })
+        .where(eq(users.id, userId));
     }
   } catch (error) {
     console.warn("Usage tracking failed", error);
@@ -137,13 +148,13 @@ const normalizeModelForProvider = (provider: ProviderName, body: Record<string, 
 };
 
 // ── Streaming proxy ──────────────────────────────────────────
-const proxyStream = async (provider: ProviderName, body: Record<string, unknown>, res: Response) => {
+const proxyStream = async (provider: ProviderName, body: Record<string, unknown>, res: ExpressResponse) => {
   const config = PROVIDER_CONFIG[provider];
   const apiKey = config.key();
   if (!apiKey) return res.status(401).json({ error: `No ${config.name} API key configured` });
 
   const url = typeof config.url === "function" ? config.url(apiKey) : config.url;
-  let upstreamBody: unknown = normalizeModelForProvider(provider, body);
+  let upstreamBody: Record<string, unknown> = normalizeModelForProvider(provider, body);
 
   if (provider === "deepseek" || provider === "openai" || provider === "claude") {
     upstreamBody = { ...(upstreamBody as Record<string, unknown>), stream: true };
@@ -243,7 +254,7 @@ const proxyStream = async (provider: ProviderName, body: Record<string, unknown>
 };
 
 // ── Non-streaming proxy ─────────────────────────────────────
-const proxyNonStream = async (provider: ProviderName, body: Record<string, unknown>, res: Response) => {
+const proxyNonStream = async (provider: ProviderName, body: Record<string, unknown>, res: ExpressResponse) => {
   const config = PROVIDER_CONFIG[provider];
   const apiKey = config.key();
   if (!apiKey) return res.status(401).json({ error: `No ${config.name} API key configured` });

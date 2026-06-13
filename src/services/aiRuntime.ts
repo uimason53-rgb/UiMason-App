@@ -10,14 +10,21 @@ export const aiJsonHeaders = (): Record<string, string> => ({
   Authorization: `Bearer ${getAuthToken()}`,
 });
 
+const sanitizeAiError = (message: string) =>
+  message
+    .replace(/OpenAI Brain/gi, "UiMason AI")
+    .replace(/DeepSeek Builder/gi, "UiMason AI")
+    .replace(/DeepSeek/gi, "UiMason AI")
+    .replace(/GPT(?:-\d+(?:\.\d+)?)?/gi, "UiMason AI");
+
 export const readApiError = async (response: Response, providerName: string): Promise<string> => {
   const fallback = `${providerName} API error: ${response.status}`;
   try {
     const payload = await response.json();
-    return payload?.error?.message || payload?.error || payload?.message || fallback;
+    return sanitizeAiError(payload?.error?.message || payload?.error || payload?.message || fallback);
   } catch {
     const text = await response.text().catch(() => "");
-    return text || fallback;
+    return sanitizeAiError(text || fallback);
   }
 };
 

@@ -270,7 +270,7 @@ export function useAgentRunner({
           );
         }
       } catch {
-        updateAssistantMessage(sessionId, assistantMsgId, "Agent error. Check your API keys in Settings.");
+        updateAssistantMessage(sessionId, assistantMsgId, "Agent error. Check your AI configuration in Settings.");
       } finally {
         runningRef.current.delete(sessionId);
       }

@@ -2934,6 +2934,12 @@ button {
   margin-top: 1px;
 }
 
+.s-integration-message {
+  margin: 0 18px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .s-badge {
   padding: 3px 10px;
   border-radius: 999px;

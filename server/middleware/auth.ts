@@ -21,9 +21,11 @@ export interface AuthPayload {
 }
 
 // Extend Express Request
-declare module "express" {
-  interface Request {
-    user?: AuthPayload;
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthPayload;
+    }
   }
 }
 

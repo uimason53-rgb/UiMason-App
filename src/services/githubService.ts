@@ -58,13 +58,19 @@ export const getGitHubStatus = async (): Promise<GitHubStatus> => {
   return response.json();
 };
 
-export const connectGitHub = async (token: string): Promise<GitHubStatus> => {
-  const response = await fetch("/api/github/connect", {
+export const startGitHubOAuth = async (): Promise<{ url: string; state: string }> => {
+  const response = await fetch("/api/github/oauth/start", { headers: apiHeaders() });
+  if (!response.ok) throw new Error(await readError(response, "GitHub OAuth is not configured"));
+  return response.json();
+};
+
+export const exchangeGitHubOAuthCode = async (code: string, state: string): Promise<GitHubStatus> => {
+  const response = await fetch("/api/github/oauth/exchange", {
     method: "POST",
     headers: apiHeaders(),
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ code, state }),
   });
-  if (!response.ok) throw new Error(await readError(response, "Failed to connect GitHub"));
+  if (!response.ok) throw new Error(await readError(response, "Failed to complete GitHub connection"));
   return response.json();
 };
 

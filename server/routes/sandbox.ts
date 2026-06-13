@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authMiddleware } from "../middleware/auth";
+import { generalRateLimiter } from "../middleware/rateLimiter";
 import {
+  cancelSandboxJob,
   createSandboxJob,
   getSandboxJob,
+  getSandboxWorkerStatus,
   subscribeSandboxJob,
   type SandboxCommandName,
   type SandboxStreamEvent,
@@ -11,6 +14,7 @@ import {
 
 const router = Router();
 router.use(authMiddleware);
+router.use(generalRateLimiter);
 
 const commandSchema = z.enum(["install", "build", "lint", "test"]);
 
@@ -35,15 +39,29 @@ router.post("/sandbox/jobs", (req, res) => {
     return res.status(400).json({ error: "Invalid sandbox job", details: parsed.error.flatten() });
   }
 
-  const job = createSandboxJob(req.user!.userId, parsed.data.files, {
-    commands: parsed.data.commands as SandboxCommandName[] | undefined,
-    timeoutMs: parsed.data.timeoutMs,
-  });
-  res.status(202).json(job);
+  try {
+    const job = createSandboxJob(req.user!.userId, parsed.data.files, {
+      commands: parsed.data.commands as SandboxCommandName[] | undefined,
+      timeoutMs: parsed.data.timeoutMs,
+    });
+    res.status(202).json(job);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create sandbox job" });
+  }
+});
+
+router.get("/sandbox/worker", (_req, res) => {
+  res.json(getSandboxWorkerStatus());
 });
 
 router.get("/sandbox/jobs/:jobId", (req, res) => {
   const job = getSandboxJob(req.user!.userId, req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Sandbox job not found" });
+  res.json(job);
+});
+
+router.post("/sandbox/jobs/:jobId/cancel", (req, res) => {
+  const job = cancelSandboxJob(req.user!.userId, req.params.jobId);
   if (!job) return res.status(404).json({ error: "Sandbox job not found" });
   res.json(job);
 });

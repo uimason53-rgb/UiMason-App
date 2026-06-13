@@ -1,10 +1,9 @@
-// ─────────────────────────────────────────────────────────────
 // server/routes/agentSessions.ts
-// Agent session CRUD — scoped to authenticated user
-// ─────────────────────────────────────────────────────────────
 import { Router } from "express";
 import { z } from "zod";
-import db from "../db/index";
+import { db } from "../db/client";
+import { agentSessions } from "../db/schema";
+import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth";
 
 const router = Router();
@@ -19,24 +18,26 @@ const updateSchema = z.object({
 });
 
 // ── GET /api/agent-sessions/:sessionId ───────────────────────
-router.get("/:sessionId", (req, res) => {
-  const row = db.prepare(
-    "SELECT * FROM agent_sessions WHERE session_id = ? AND userId = ?"
-  ).get(req.params.sessionId, req.user!.userId) as Record<string, unknown> | undefined;
+router.get("/:sessionId", async (req, res) => {
+  const result = await db
+    .select()
+    .from(agentSessions)
+    .where(and(eq(agentSessions.sessionId, req.params.sessionId), eq(agentSessions.userId, req.user!.userId)))
+    .limit(1);
 
-  if (!row) {
-    return res.json(null);
-  }
+  if (result.length === 0) return res.json(null);
+
+  const row = result[0];
   res.json({
     ...row,
-    plan: row.plan ? JSON.parse(row.plan as string) : null,
-    files: row.files ? JSON.parse(row.files as string) : [],
-    logs: row.logs ? JSON.parse(row.logs as string) : [],
+    plan: row.plan ? JSON.parse(row.plan) : null,
+    files: row.files ? JSON.parse(row.files) : [],
+    logs: row.logs ? JSON.parse(row.logs) : [],
   });
 });
 
 // ── PUT /api/agent-sessions/:sessionId (upsert) ──────────────
-router.put("/:sessionId", (req, res) => {
+router.put("/:sessionId", async (req, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid agent session data", details: parsed.error.flatten() });
@@ -44,45 +45,48 @@ router.put("/:sessionId", (req, res) => {
 
   const now = Date.now();
   const data = parsed.data;
-  const existing = db.prepare(
-    "SELECT session_id FROM agent_sessions WHERE session_id = ? AND userId = ?"
-  ).get(req.params.sessionId, req.user!.userId);
 
-  if (!existing) {
-    db.prepare(
-      "INSERT INTO agent_sessions (session_id, userId, prompt, plan, files, logs, state, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)"
-    ).run(
-      req.params.sessionId,
-      req.user!.userId,
-      data.prompt || "",
-      data.plan !== undefined ? JSON.stringify(data.plan) : null,
-      data.files !== undefined ? JSON.stringify(data.files) : "[]",
-      data.logs !== undefined ? JSON.stringify(data.logs) : "[]",
-      data.state || "idle",
-      now,
-      now
-    );
+  const existing = await db
+    .select({ sessionId: agentSessions.sessionId })
+    .from(agentSessions)
+    .where(and(eq(agentSessions.sessionId, req.params.sessionId), eq(agentSessions.userId, req.user!.userId)))
+    .limit(1);
+
+  if (existing.length === 0) {
+    await db.insert(agentSessions).values({
+      sessionId: req.params.sessionId,
+      userId: req.user!.userId,
+      prompt: data.prompt || "",
+      plan: data.plan !== undefined ? JSON.stringify(data.plan) : null,
+      files: data.files !== undefined ? JSON.stringify(data.files) : "[]",
+      logs: data.logs !== undefined ? JSON.stringify(data.logs) : "[]",
+      state: data.state || "idle",
+      createdAt: now,
+      updatedAt: now,
+    });
   } else {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    if (data.prompt !== undefined) { fields.push("prompt = ?"); values.push(data.prompt); }
-    if (data.plan !== undefined) { fields.push("plan = ?"); values.push(JSON.stringify(data.plan)); }
-    if (data.files !== undefined) { fields.push("files = ?"); values.push(JSON.stringify(data.files)); }
-    if (data.logs !== undefined) { fields.push("logs = ?"); values.push(JSON.stringify(data.logs)); }
-    if (data.state !== undefined) { fields.push("state = ?"); values.push(data.state); }
-    fields.push("updatedAt = ?");
-    values.push(now);
-    values.push(req.params.sessionId);
-    values.push(req.user!.userId);
-    db.prepare(`UPDATE agent_sessions SET ${fields.join(", ")} WHERE session_id = ? AND userId = ?`).run(...values);
+    const updates: Record<string, unknown> = { updatedAt: now };
+    if (data.prompt !== undefined) updates.prompt = data.prompt;
+    if (data.plan !== undefined) updates.plan = JSON.stringify(data.plan);
+    if (data.files !== undefined) updates.files = JSON.stringify(data.files);
+    if (data.logs !== undefined) updates.logs = JSON.stringify(data.logs);
+    if (data.state !== undefined) updates.state = data.state;
+
+    await db
+      .update(agentSessions)
+      .set(updates)
+      .where(and(eq(agentSessions.sessionId, req.params.sessionId), eq(agentSessions.userId, req.user!.userId)));
   }
 
   res.json({ ok: true, updatedAt: now });
 });
 
 // ── DELETE /api/agent-sessions/:sessionId ────────────────────
-router.delete("/:sessionId", (req, res) => {
-  db.prepare("DELETE FROM agent_sessions WHERE session_id = ? AND userId = ?").run(req.params.sessionId, req.user!.userId);
+router.delete("/:sessionId", async (req, res) => {
+  await db
+    .delete(agentSessions)
+    .where(and(eq(agentSessions.sessionId, req.params.sessionId), eq(agentSessions.userId, req.user!.userId)));
+
   res.json({ ok: true });
 });
 

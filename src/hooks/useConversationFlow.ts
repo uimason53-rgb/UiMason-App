@@ -121,7 +121,7 @@ export function useConversationFlow({
         const msg =
           err instanceof Error
             ? err.message
-            : "Something went wrong. Please check your OpenAI Brain and DeepSeek Builder API keys in Settings.";
+            : "Something went wrong. Please check your AI configuration in Settings.";
         updateAssistantMessage(sessionId, assistantMsgId, msg);
         runningRef.current.delete(sessionId);
       }

@@ -14,11 +14,11 @@ import {
 import { getPreviewUrl, getSandboxStatus, onPreviewUrl, onStatusChange, startDevServer, teardownContainer, type SandboxStatus } from "../../services/sandboxService";
 import { getDeployments, smartDeploy, type DeploymentRecord, type DeployResult } from "../../services/deployService";
 import {
-  connectGitHub,
   createGitHubPullRequest,
   listGitHubBranches,
   listGitHubRepos,
   getGitHubStatus,
+  startGitHubOAuth,
   type GitHubBranch,
   type GitHubPullRequestResult,
   type GitHubRepo,
@@ -1065,15 +1065,13 @@ function SourceControlPanel({
   selectedRepo,
   selectedBaseBranch,
   branchName,
-  githubToken,
   githubBusy,
   githubError,
   githubPrResult,
-  onGitHubTokenChange,
   onSelectedRepoChange,
   onBaseBranchChange,
   onBranchNameChange,
-  onConnectGitHub,
+  onConnectSourceControl,
   onRefreshGitHub,
   onCreatePullRequest,
 }: {
@@ -1091,15 +1089,13 @@ function SourceControlPanel({
   selectedRepo: string;
   selectedBaseBranch: string;
   branchName: string;
-  githubToken: string;
   githubBusy: boolean;
   githubError: string | null;
   githubPrResult: GitHubPullRequestResult | null;
-  onGitHubTokenChange: (token: string) => void;
   onSelectedRepoChange: (repo: string) => void;
   onBaseBranchChange: (branch: string) => void;
   onBranchNameChange: (branch: string) => void;
-  onConnectGitHub: () => void;
+  onConnectSourceControl: () => void;
   onRefreshGitHub: () => void;
   onCreatePullRequest: () => void;
 }) {
@@ -1168,22 +1164,16 @@ function SourceControlPanel({
       <div className="workflow-panel__section">
         <div className="workflow-panel__header">
           <div>
-            <strong>GitHub PR</strong>
-            <span>{githubStatus?.connected ? `Connected as ${githubStatus.username}` : "Connect a GitHub token with repo access"}</span>
+            <strong>Pull request</strong>
+            <span>{githubStatus?.connected ? `Connected as ${githubStatus.username}` : "Connect source control to publish changes"}</span>
           </div>
           <button className="proj-action-btn" onClick={onRefreshGitHub} disabled={githubBusy}>Refresh</button>
         </div>
         {!githubStatus?.connected && (
           <div className="workflow-github-connect">
-            <input
-              className="project-search-input"
-              type="password"
-              value={githubToken}
-              onChange={(event) => onGitHubTokenChange(event.target.value)}
-              placeholder="GitHub fine-grained token"
-            />
-            <button className="proj-action-btn proj-action-btn--primary" onClick={onConnectGitHub} disabled={githubBusy || githubToken.length < 20}>
-              Connect GitHub
+            <div className="workflow-empty">Connect once to choose a repository and open a pull request.</div>
+            <button className="proj-action-btn proj-action-btn--primary" onClick={onConnectSourceControl} disabled={githubBusy}>
+              {githubBusy ? "Connecting..." : "Connect and continue"}
             </button>
           </div>
         )}
@@ -1355,7 +1345,6 @@ export default function Project({
   const [selectedGithubRepo, setSelectedGithubRepo] = useState("");
   const [selectedGithubBaseBranch, setSelectedGithubBaseBranch] = useState("");
   const [githubBranchName, setGithubBranchName] = useState(() => `uimason/${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`);
-  const [githubToken, setGithubToken] = useState("");
   const [githubBusy, setGithubBusy] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
   const [githubPrResult, setGithubPrResult] = useState<GitHubPullRequestResult | null>(null);
@@ -1408,6 +1397,22 @@ export default function Project({
       setGithubBusy(false);
     }
   }, []);
+
+  const handleConnectSourceControl = useCallback(async () => {
+    setGithubBusy(true);
+    setGithubError(null);
+    try {
+      const { url } = await startGitHubOAuth();
+      window.location.href = url;
+    } catch (error) {
+      setGithubError(error instanceof Error ? error.message : "Source control connection is not configured.");
+      setGithubBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    Promise.resolve().then(refreshGitHub);
+  }, [refreshGitHub]);
 
   const selectFileByPath = useCallback((path: string) => {
     const file = rawFiles.find((item) => item.path === path);
@@ -1485,22 +1490,6 @@ export default function Project({
     deleteCheckpoint(projectName, checkpointId);
     reloadCheckpoints();
   }, [projectName, reloadCheckpoints]);
-
-  const handleConnectGitHub = useCallback(async () => {
-    setGithubBusy(true);
-    setGithubError(null);
-    try {
-      const status = await connectGitHub(githubToken);
-      setGithubStatus(status);
-      setGithubToken("");
-      const repos = await listGitHubRepos();
-      setGithubRepos(repos);
-    } catch (error) {
-      setGithubError(error instanceof Error ? error.message : "Failed to connect GitHub");
-    } finally {
-      setGithubBusy(false);
-    }
-  }, [githubToken]);
 
   const handleSelectedGithubRepoChange = useCallback(async (fullName: string) => {
     setSelectedGithubRepo(fullName);
@@ -2000,15 +1989,13 @@ export default function Project({
                 selectedRepo={selectedGithubRepo}
                 selectedBaseBranch={selectedGithubBaseBranch}
                 branchName={githubBranchName}
-                githubToken={githubToken}
                 githubBusy={githubBusy}
                 githubError={githubError}
                 githubPrResult={githubPrResult}
-                onGitHubTokenChange={setGithubToken}
                 onSelectedRepoChange={handleSelectedGithubRepoChange}
                 onBaseBranchChange={setSelectedGithubBaseBranch}
                 onBranchNameChange={setGithubBranchName}
-                onConnectGitHub={handleConnectGitHub}
+                onConnectSourceControl={handleConnectSourceControl}
                 onRefreshGitHub={refreshGitHub}
                 onCreatePullRequest={handleCreateGitHubPullRequest}
               />

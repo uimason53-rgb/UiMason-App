@@ -65,7 +65,7 @@ export const planProjectDeepSeek = async (userPrompt: string): Promise<ProjectPl
     const clean = raw.replace(/```json|```/g, "").trim();
     return JSON.parse(clean) as ProjectPlan;
   } catch {
-    throw new Error("Failed to parse project plan from DeepSeek response.");
+    throw new Error("Failed to parse project plan from UiMason AI response.");
   }
 };
 
@@ -110,7 +110,7 @@ export const generateCodeDeepSeek = async (
 
     const streamResult = await reader;
     const rawChoice = streamResult?.message;
-    if (!rawChoice) throw new Error("No response from DeepSeek");
+    if (!rawChoice) throw new Error("No response from UiMason AI");
 
     const choice = {
       content: rawChoice.content || null,
@@ -187,7 +187,7 @@ export const generateCodeDeepSeek = async (
       : `Generated ${files.length} files successfully.`);
 
   if (files.length === 0) {
-    throw new Error("DeepSeek Builder returned no files. Ask again with a clearer build request or check the DeepSeek API response format.");
+    throw new Error("UiMason AI returned no files. Ask again with a clearer build request or check the AI configuration.");
   }
 
   return { files, summary, rawResponse: finalContent };

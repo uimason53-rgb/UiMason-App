@@ -300,12 +300,33 @@ type BackendSandboxCommand = {
 
 type BackendSandboxResult = {
   success: boolean;
-  status: "queued" | "running" | "passed" | "failed" | "timeout" | "error";
+  status: "queued" | "running" | "passed" | "failed" | "timeout" | "error" | "cancelled";
   commands: BackendSandboxCommand[];
   errors: string[];
   warnings: string[];
   allOutput: string;
   duration: number;
+  failureSummary?: string;
+  resourceUsage?: {
+    fileCount: number;
+    inputBytes: number;
+    workspaceBytes: number;
+    commandCount: number;
+    timedOut: boolean;
+    startedAt: number;
+    completedAt?: number;
+  };
+  policy?: {
+    mode: "docker" | "local";
+    network: "install-only" | "host";
+    installIgnoresScripts: boolean;
+    timeoutMs: number;
+    maxFiles: number;
+    maxFileBytes: number;
+    maxWorkspaceBytes: number;
+    concurrency: number;
+    dockerImage?: string;
+  };
 };
 
 type BackendSandboxJob = {
@@ -329,7 +350,7 @@ const backendResultToBuildResult = (result: BackendSandboxResult): BuildResult =
     buildResult: command("build") ? backendCommandToResult(command("build")!) : null,
     lintResult: command("lint") ? backendCommandToResult(command("lint")!) : null,
     testResult: command("test") ? backendCommandToResult(command("test")!) : null,
-    errors: result.errors,
+    errors: result.failureSummary ? [result.failureSummary, ...result.errors.filter((error) => error !== result.failureSummary)] : result.errors,
     warnings: result.warnings,
     allOutput: result.allOutput,
     duration: result.duration,
@@ -392,6 +413,12 @@ const runBackendBuildPipeline = async (files: GeneratedFile[]): Promise<BuildRes
   const job = (await response.json()) as BackendSandboxJob;
   emitBuildLog(`[cloud-sandbox] Job ${job.id} started`);
   const result = await streamBackendJob(job.id);
+  if (result.policy) {
+    emitBuildLog(`[cloud-sandbox] Runner mode=${result.policy.mode}, network=${result.policy.network}, timeout=${Math.round(result.policy.timeoutMs / 1000)}s`);
+  }
+  if (result.resourceUsage) {
+    emitBuildLog(`[cloud-sandbox] Resources: files=${result.resourceUsage.fileCount}, workspace=${Math.round(result.resourceUsage.workspaceBytes / 1024)}KB, commands=${result.resourceUsage.commandCount}`);
+  }
   emitBuildLog(`[cloud-sandbox] Job ${job.id} ${result.success ? "passed" : "failed"} in ${(result.duration / 1000).toFixed(1)}s`);
   return backendResultToBuildResult(result);
 };
